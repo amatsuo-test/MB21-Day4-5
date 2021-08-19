@@ -1,0 +1,114 @@
+---
+title: "Process a lot of files with parallelization"
+author: ""
+date: "20/08/2021"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Introduction
+
+In this exercise you will work with a lot of data files. The data come from EuroParl dataset (https://www.statmt.org/europarl/). I extracted english speeches and kept speaker's name, speech contents, and date, and then split the data to each month and saved. 
+
+#### get the data
+
+```{r}
+dir.create("tmp")
+if(!file.exists("tmp/europarl-data.zip")){
+  download.file("https://www.dropbox.com/s/kr6hg7z5wj9ohu8/europarl-data.zip?dl=1", 
+                destfile = "tmp/europarl-data.zip")
+  unzip("tmp/europarl-data.zip", exdir = "tmp")
+}
+```
+
+### Load packages
+
+```{r}
+library(tidyverse)
+library(stringi)
+library(data.table)
+library(parallel)
+library(furrr)
+library(microbenchmark)
+library(SentimentAnalysis)
+
+```
+
+### First step: check a sample 
+
+1. Get the list of files 
+2. Open the first file
+
+```{r}
+files <- list.files('tmp/europarl-data/', pattern = 'tar', full.names = T)
+length(files)
+(tmp <- files[1] %>% fread())
+```
+
+### Open all files and combine
+
+There are several ways to open all files and combine
+1. `lapply` + `fread`
+2. `map_dfr` + `read_csv` (pure tidyverse solution)
+3. `map_dfr` + `fread` 
+
+```{r}
+df_1 <- lapply(files, fread) %>% rbindlist()
+df_2 <- map_dfr(files, read_csv) 
+df_3 <- map_dfr(files, ~fread(.x)) 
+```
+### Open all files and combine, multi-thread
+
+```{r}
+detectCores()
+microbenchmark::microbenchmark(
+df_1 <- mclapply(files, fread, mc.cores = 4) %>% rbindlist(),
+{plan(multisession, workers = 4); df_4 <- future_map(files, ~fread(.x)) %>% rbindlist()},
+times = 1)
+```
+
+
+### SentimentAnalysis package
+
+- One of the popular options for dictionary based sentiment analyais in R is `SentimentAnalsyis` package.
+- It work like this:
+
+```{r}
+analyzeSentiment(tmp$text[1:10]) 
+```
+
+## Incorporate the sentiment analysis as a part of processing
+
+- Attach results column from SentimentGI to PositivityQDAP (13 columns)
+
+### `mcapply`
+
+```{r}
+tictoc::tic()
+files %>% 
+  head() %>%
+  mclapply(function(x){
+  c_data <- fread(x) 
+  vad <- analyzeSentiment(c_data$text) %>% select(SentimentGI:PositivityQDAP) 
+  return(bind_cols(c_data, vad))
+}, mc.cores = detectCores() * .7 )
+tictoc::toc()
+```
+### `map_dfr`
+
+```{r}
+tictoc::tic()
+plan(multisession, workers = detectCores() * .7)
+df_out <- files %>% 
+  head() %>%
+  future_map(function(x){
+  c_data <- fread(x) 
+  vad <- analyzeSentiment(c_data$text) %>% select(SentimentGI:PositivityQDAP) 
+  return(bind_cols(c_data, vad))
+}) %>% bind_rows()
+tictoc::toc()
+```
+
+

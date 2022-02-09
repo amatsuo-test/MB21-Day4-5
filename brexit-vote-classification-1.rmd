@@ -1,7 +1,7 @@
 ---
 title: "Predicting the brexit vote"
 author: ""
-date: "20/08/2021"
+date: ""
 output: html_document
 ---
 

@@ -25,6 +25,9 @@ The main difference is we can run the model on the cluster.
 ### Installation of `sparklyr`
 ```{r}
 system('java -version') # the default version of java on this server matches
+# if the java version does not match, need to roll back with:
+# sudo update-alternatives --config java
+# you need to have a sudo priviledge (sudo usermod -aG wheel <username>)
 install.packages("sparklyr") # install package
 ```
 

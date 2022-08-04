@@ -29,7 +29,7 @@ We sub-sample the data. Full data takes too much time to estimate for the class.
 
 ```{r}
 set.seed(20200813)
-data_brexit <- read_csv("data/data_bes.csv.gz") %>%
+df_brexit <- read_csv("data/df_bes.csv.gz") %>%
   sample_n(3000) # sampling data so
 ```
 
@@ -43,27 +43,27 @@ data_brexit <- read_csv("data/data_bes.csv.gz") %>%
 
 
 ```{r}
-data_brexit <- data_brexit %>%
+df_brexit <- df_brexit %>%
     mutate(LeaveVote = factor(LeaveVote))
 ```
 
 ### Train-test split
 
 ```{r}
-train_idx <- createDataPartition(data_brexit$LeaveVote, p = .7, list = F) 
+train_idx <- createDataPartition(df_brexit$LeaveVote, p = .7, list = F) 
 
-data_train <- data_brexit %>% slice(train_idx)
-data_test <- data_brexit %>% slice(-train_idx)
+df_train <- df_brexit %>% slice(train_idx)
+df_test <- df_brexit %>% slice(-train_idx)
 ```
 
 ### Preprocess
 
 ```{r}
-prep <- preProcess(data_train %>% select(-LeaveVote), method = c("center", "scale"))
+prep <- preProcess(df_train %>% select(-LeaveVote), method = c("center", "scale"))
 prep
 
-data_train_preped <- predict(prep, data_train)
-data_test_preped <- predict(prep, data_test)
+df_train_preped <- predict(prep, df_train)
+df_test_preped <- predict(prep, df_test)
 
 ```
 

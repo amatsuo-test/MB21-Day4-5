@@ -56,7 +56,7 @@ There are several ways to open all files and combine
 
 ```{r}
 df_1 <- lapply(files, fread) %>% rbindlist()
-df_2 <- map_dfr(files, read_csv) 
+df_2 <- map_dfr(files, read_csv, show_col_types = F) 
 df_3 <- map_dfr(files, ~fread(.x)) 
 ```
 ### Open all files and combine, multi-thread

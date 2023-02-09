@@ -137,7 +137,7 @@ Run a few models, and evaluate them. Which one has the better predictive perform
 
 - `glmnet` can run a Logistic model with L1 penalty (LASSO). 
 - Try a "full" model combining all inputs.
-  - Which inupts survived?
+  - Which inputs survived?
 
 ```{r}
 

@@ -32,7 +32,7 @@ We sub-sample the data. Full data takes too much time to estimate for the class.
 
 ```{r}
 set.seed(20200813)
-df_brexit <- read_csv("data/df_bes.csv.gz") %>%
+df_brexit <- read_csv("data/data_bes.csv.gz") %>%
   sample_n(3000) # sampling data so
 ```
 
@@ -53,7 +53,9 @@ df_brexit <- df_brexit %>%
 ### Train-test split
 
 ```{r}
-train_idx <- createDataPartition(df_brexit$LeaveVote, p = .7, list = F) 
+set.seed(42)
+train_idx <- createDataPartition(df_brexit$LeaveVote, p = .7, list = F) %>%
+  as.vector()
 
 df_train <- df_brexit %>% slice(train_idx)
 df_test <- df_brexit %>% slice(-train_idx)
@@ -111,15 +113,107 @@ model.matrix(fm_socdem, data = df_train_preped) %>% head()
 Run a few models, and evaluate them. Which one has the better predictive performance?
 
 ```{r}
+mod_log_socdem <- glm(fm_socdem, data = df_train_preped, family = "binomial")
+pred_log_socdem_train <- mod_log_socdem %>% predict(newdata = df_train_preped, 
+                                                    type = 'response') #%>%
+pred_log_socdem_train <- as.numeric(pred_log_socdem_train > .5) %>% factor()
+
+pred_log_socdem_train <- mod_log_socdem %>% predict(newdata = df_train_preped, 
+                                                    type = 'response') %>%
+  `>`(.5) %>% as.numeric() %>% factor()
+
+confusionMatrix(pred_log_socdem_train, df_train_preped$LeaveVote, 
+                positive = '1', mode = "prec_recall")
+
+pred_log_socdem_test <- mod_log_socdem %>% predict(newdata = df_test_preped, 
+                                                    type = 'response') #%>%
+pred_log_socdem_test <- as.numeric(pred_log_socdem_test > .5) %>% factor()
+
+pred_log_socdem_test <- mod_log_socdem %>% predict(newdata = df_test_preped, 
+                                                    type = 'response') %>%
+  `>`(.5) %>% as.numeric() %>% factor()
+
+confusionMatrix(pred_log_socdem_test, df_test_preped$LeaveVote, 
+                positive = '1', mode = "prec_recall")
 
 ```
+```{r}
+
+print_conf <- function(fm, print_train = F) {
+  mod_log <- glm(fm, data = df_train_preped, family = "binomial")
+  pred_log_train <- mod_log %>% predict(newdata = df_train_preped, 
+                                                      type = 'response') %>%
+    `>`(.5) %>% as.numeric() %>% factor()
+  if(print_train == T) {
+    print(confusionMatrix(pred_log_train, df_train_preped$LeaveVote, 
+                  positive = '1', mode = "prec_recall"))
+  }
+  pred_log_test <- mod_log %>% predict(newdata = df_test_preped, 
+                                                      type = 'response') %>%
+    `>`(.5) %>% as.numeric() %>% factor()
+  
+  print(confusionMatrix(pred_log_test, df_test_preped$LeaveVote, 
+                  positive = '1', mode = "prec_recall"))
+}
+
+
+print_conf(fm_identity)
+```
+```{r}
+conf_m <- confusionMatrix(pred_log_socdem_test, df_test_preped$LeaveVote, 
+                positive = '1', mode = "prec_recall")
+conf_m$byClass['F1']
+
+```
+
 
 ## Linear SVM
 
 - Train a linear SVM model, check the predictive performance. How does it compare to the logistic regression?
 
 ```{r}
+mod_lsvm_socdem <- train(fm_socdem, 
+                        data = df_train_preped, 
+                        method = 'svmLinear')
+mod_lsvm_socdem
+pred_lsvm_socdem_train <- mod_lsvm_socdem %>% predict(newdata = df_train_preped)
+confusionMatrix(pred_lsvm_socdem_train, df_train_preped$LeaveVote, 
+                positive = '1', mode = "prec_recall")
+pred_lsvm_socdem_test <- mod_lsvm_socdem %>% predict(newdata = df_test_preped)
+confusionMatrix(pred_lsvm_socdem_test, df_test_preped$LeaveVote, 
+                positive = '1', mode = "prec_recall")
 
+
+```
+
+
+```{r}
+
+print_train_result <- 
+  function(fm, method = "svmLinear", 
+           print_train = F,
+           tuneGrid = NULL, # NEW
+           print_model = F
+           ) {
+  ctrl <- trainControl(method = 'repeatedcv')
+  mod_temp <- train(fm, 
+                    data = df_train_preped, 
+                    trControl = ctrl,
+                    tuneGrid = tuneGrid, 
+                    method = method)
+  if(print_model) print(mod_temp)
+  pred_train <- mod_temp %>% predict(newdata = df_train_preped)
+  if(print_train) {
+    print(confusionMatrix(pred_train, df_train_preped$LeaveVote, 
+                  positive = '1', mode = "prec_recall"))
+  }
+  pred_test <- mod_temp %>% predict(newdata = df_test_preped)
+  
+  print(confusionMatrix(pred_test, df_test_preped$LeaveVote, 
+                positive = '1', mode = "prec_recall"))
+}
+
+print_train_result(fm_all)
 ```
 
 
@@ -128,6 +222,13 @@ Run a few models, and evaluate them. Which one has the better predictive perform
 - Train non-linear SVM. How is the performance? Any improvement?
 
 ```{r cache=T}
+print_train_result(fm_all, method = "svmRadial", 
+                   print_model = T)
+
+## customized tunegrid
+print_train_result(fm_all, method = "knn", 
+                   tuneGrid = data.frame(k = c(2:10, 20, 40, 50)),
+                   print_model = T)
 
 
 ```
@@ -140,7 +241,84 @@ Run a few models, and evaluate them. Which one has the better predictive perform
   - Which inputs survived?
 
 ```{r}
+mat_train_x <- df_train_preped %>% select(-LeaveVote) %>% as.matrix()
+mat_test_x <- df_test_preped %>% select(-LeaveVote) %>% as.matrix()
 
+```
+
+
+```{r}
+mod_lasso <- cv.glmnet(mat_train_x, 
+                       df_train_preped$LeaveVote, 
+          alpha = 1, 
+          family = "binomial")
+
+coef(mod_lasso)
+plot(mod_lasso)
+plot(mod_lasso$glmnet.fit, xvar = "lambda")
+
+pred_train <- as.integer(predict(mod_lasso, newx = mat_train_x) > 0) %>% factor()
+pred_test <- as.integer(predict(mod_lasso, newx = mat_test_x) > 0) %>% factor()
+
+confusionMatrix(df_test_preped$LeaveVote, pred_test, 
+                      positive = '1', 
+                      mode = "everything")
+
+```
+
+- The model eliminates all varirables other than identidy and issues. 
+
+```{r}
+
+plotmo::plot_glmnet(mod_lasso$glmnet.fit, xvar = "lambda")
+
+```
+
+
+### Model comparison with map
+
+#### Running a lot of logistic regressions and printout cofusion matrix
+
+```{r, eval = F}
+list_fm <- list(fm_all, fm_socdem, fm_identity, fm_antielite, fm_attitudes)
+list_fm %>% map(print_conf)
+```
+
+#### use the contents of confusion matrix for model comparision
+
+##### Define new function
+
+- This function create a single row dataframe from a confusion matrix after a model estimation
+
+```{r}
+
+get_conf <- function(fm = fm_all) {
+  mod_log <- glm(fm, data = df_train_preped, family = "binomial")
+  pred_log_test <- mod_log %>% predict(newdata = df_test_preped, 
+                                                      type = 'response') %>%
+    `>`(.5) %>% as.numeric() %>% factor()
+  conf <- confusionMatrix(pred_log_test, df_test_preped$LeaveVote, 
+                  positive = '1', mode = "prec_recall")
+  c(conf$overall, conf$byClass) %>% as.list() %>% as_tibble()
+}
+
+get_conf(fm_socdem)
+```
+#### using the function, we can generate a data.frame of model performance
+
+```{r}
+
+df_fm <- tibble(modname = c("All", "SocDem", "Identity", "AntiElite", "Attitudes"), 
+                  fm = c(fm_all, fm_socdem, fm_identity, fm_antielite, fm_attitudes)) 
+df_fm <- df_fm %>%
+  mutate(conf = map(fm, get_conf)) # get a confusion matrix output using the new function
+
+df_fm # the dataframe is "nested" 
+
+## unnest
+df_fm %>%
+  unnest(conf) 
+  
 ```
 
 

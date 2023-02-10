@@ -79,8 +79,8 @@ file.remove("tmp_db.sqlite")
 db <- dbConnect(RSQLite::SQLite(), "tmp_db.sqlite")
 
 files %>% 
-  map(~vroom::vroom(.x, show_col_types=F) %>% 
-  dbWriteTable(db, "speech", ., append = T))
+  map(~ vroom::vroom(.x, show_col_types=F) %>% 
+        dbWriteTable(db, "speech", ., append = T))
 
 dbDisconnect(db)
 
@@ -102,7 +102,6 @@ dbDisconnect(db)
 #### Benchmarking: combine all files and write to a table or sequentially put each file in a table?
 
 ```{r}
-library(DBI)
 microbenchmark(
   combine_write = 
     {df <- map_dfr(files, vroom::vroom, show_col_types = F);

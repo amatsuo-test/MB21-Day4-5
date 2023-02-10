@@ -1,7 +1,7 @@
 ---
 title: "Process a lot of files with map()"
 author: ""
-date: "05/08/2022"
+date: ""
 output: html_document
 ---
 ```{r setup, include=FALSE}

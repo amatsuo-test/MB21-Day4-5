@@ -40,7 +40,7 @@ spark_install("2.3")
 spark_installed_versions()
 
 ## Connect
-sc <- spark_connect(master = "local", version = "2.3")
+sc <- spark_connect(master = "local", version = "3.2.3")
 ```
 
 ### Put the data on spark

@@ -1,0 +1,121 @@
+---
+title: "Process a lot of files with map()"
+author: ""
+date: "05/08/2022"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Introduction
+
+In this exercise you will work with a lot of data files. The data come from EuroParl dataset (https://www.statmt.org/europarl/). I extracted english speeches and kept speaker's name, speech contents, and date, and then split the data to each month and saved. 
+
+#### get the data
+
+```{r}
+dir.create("tmp")
+if(!file.exists("tmp/europarl-data.zip")){
+  download.file("https://www.dropbox.com/s/kr6hg7z5wj9ohu8/europarl-data.zip?dl=1", 
+                destfile = "tmp/europarl-data.zip")
+  unzip("tmp/europarl-data.zip", exdir = "tmp")
+}
+```
+
+### Load packages
+
+```{r}
+library(tidyverse)
+library(data.table)
+library(DBI)
+library(microbenchmark)
+
+```
+
+### First step: check a sample 
+
+1. Get the list of files 
+2. Open the first file
+
+```{r}
+files <- list.files('tmp/europarl-data/', pattern = 'tar', full.names = T)
+length(files)
+(tmp <- files[1] %>% vroom::vroom())
+```
+
+### How `map()` works
+
+- Similar to `lapply()`
+  - `lapply` returns a list of the same length as `X`, each element of which is the result of applying `FUN` to the corresponding element of `X`.
+- `map()` is a tidyverse version of it. You can use an anonymous function `~`
+
+```{r}
+vec <- 1:10
+lapply(vec, function(x) 1 + x)
+map(vec, function(x) 1 + x)
+map(vec, ~ `+`(1, .x))
+```
+
+### Open all files and combine
+
+Once you get a list of files you can easily combine files in a single data.frame. Options would be
+
+1. `lapply` + `fread`
+2. `map` + `vroom::vroom` (or `read_csv`)
+
+```{r}
+microbenchmark(
+df_1 <- lapply(files, fread) %>% rbindlist(),
+df_2 <- map(files, vroom::vroom, show_col_types = F) %>% bind_rows() ,
+times = 1)
+```
+
+### put files into a table in a sqlite database
+
+```{r}
+library(DBI)
+file.remove("tmp_db.sqlite")
+db <- dbConnect(RSQLite::SQLite(), "tmp_db.sqlite")
+
+files %>% 
+  map(~vroom::vroom(.x, show_col_types=F) %>% 
+  dbWriteTable(db, "speech", ., append = T))
+
+dbDisconnect(db)
+
+### or you can use for-loop
+file.remove("tmp_db.sqlite")
+
+db <- dbConnect(RSQLite::SQLite(), "tmp_db.sqlite")
+
+for (fn in files){
+  df_temp <- vroom::vroom(fn, show_col_types=F)
+  dbWriteTable(db, "speech", df_temp, append = T)
+}
+
+dbDisconnect(db)
+
+```
+
+
+#### Benchmarking: combine all files and write to a table or sequentially put each file in a table?
+
+```{r}
+library(DBI)
+microbenchmark(
+  combine_write = 
+    {df <- map_dfr(files, vroom::vroom, show_col_types = F);
+     df %>% dbWriteTable(db, "speech", .)},
+  seq_write = 
+    {files %>% map(
+      ~ vroom::vroom(.x, show_col_types=F) %>% 
+        dbWriteTable(db, "speech", ., append = T)) ;},
+  times = 1,
+  setup = {file.remove("tmp_db.sqlite"); 
+    db <- dbConnect(RSQLite::SQLite(), "tmp_db.sqlite")}
+)
+```
+
+
+
